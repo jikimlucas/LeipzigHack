@@ -49,33 +49,11 @@ object FlinkScalaJob {
     }).keyBy((event: GDELTEvent) => {
       event.actor1Code_countryCode
     }).window(TumblingEventTimeWindows.of(Time.days(1)))
-    .aggregate(new SumAggregate(), new SumWindowFunction())
-/*    .fold(
-        0.0,
-        new FoldFunction[GDELTEvent, Double] {
-          override def fold(accumulator: Double, value: GDELTEvent) = {
-            accumulator
-          }
-        },
-        new WindowFunction[Double, (String), String, TimeWindow] {
-          override def apply(key: String,
-                             window: TimeWindow,
-                             input: Iterable[Double],
-                             //out: Collector[(String, Double, String)]
-                             out: Collector[(String)]
-                              ): Unit = {
-            val format = new java.text.SimpleDateFormat("yyyy-MM-dd")
-            val formated_date = format.format(new Date(window.getStart))
-            val output = key + "|" + input.head + "|" + formated_date + "\n"
-           // out.collect((key, input.head, formated_date))
-            out.collect(output)
-          }
-        }
-    )*/
+    .aggregate(new SumAggregate2(), new SumWindowFunction())
+  //.writeAsText("/Users/jlucas/Documents/leipzig/filtered.csv")
+  // .writeToSocket("localhost",5555, new SimpleStringSchema())
 
-   .writeToSocket("localhost",5555, new SimpleStringSchema())
-
-  //  filtered_source.print()
+    filtered_source.print()
 
 
     env.execute("Flink Scala GDELT Analyzer")
@@ -94,20 +72,36 @@ object FlinkScalaJob {
       accumulator._1 + value.avgTone, accumulator._2 +1)
   }
 
+  class SumAggregate2 extends AggregateFunction[GDELTEvent, (Double, Integer, Double,String), (Double, Integer,Double, String)] {
+
+    override def createAccumulator(): (Double, Integer, Double, String) = (0.0, 0, 0.0,"")
+
+    override def merge(a: (Double, Integer, Double,String), b: (Double, Integer,Double,String)): (Double, Integer,Double,String)
+    = (a._1+b._1, a._2 + b._2, a._3, a._4)
+
+    override def getResult(accumulator: (Double, Integer, Double,String)): (Double, Integer, Double,String) = accumulator
+
+    override def add(value: GDELTEvent, accumulator: ( Double, Integer, Double, String))  = (
+      accumulator._1 + value.avgTone, accumulator._2 +1,
+      if( Math.abs(accumulator._3) < Math.abs(value.avgTone)  ) value.avgTone else accumulator._3,
+      if( Math.abs(accumulator._3) <  Math.abs(value.avgTone)  ) value.eventCode else accumulator._4
+      )
+  }
+
   class SumWindowFunction
-    extends WindowFunction[(Double, Integer), (String), String, TimeWindow] {
+    extends WindowFunction[(Double, Integer, Double, String), (String), String, TimeWindow] {
 
     override def apply(
                         key: String,
                         window: TimeWindow,
-                        input: Iterable[(Double, Integer)],
+                        input: Iterable[(Double, Integer, Double, String)],
                        // out: Collector[(String, Double, Integer, String)]): Unit = {
                         out: Collector[(String)]): Unit = {
       val format = new java.text.SimpleDateFormat("yyyy-MM-dd")
       val formated_date = format.format(new Date(window.getStart))
 
       input.foreach(e => {
-        val output = key + "|" + e._1 + "|" + e._2 + "|" +  formated_date + "\n"
+        val output = key + "|" + e._1 + "|" + e._2 + "|" +  e._3 + "|"  + e._4 + "|" + formated_date + "\n"
         out.collect(
           (output)
         )
