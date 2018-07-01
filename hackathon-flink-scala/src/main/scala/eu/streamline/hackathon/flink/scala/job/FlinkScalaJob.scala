@@ -51,9 +51,9 @@ object FlinkScalaJob {
     }).window(TumblingEventTimeWindows.of(Time.days(1)))
     .aggregate(new SumAggregate2(), new SumWindowFunction())
   //.writeAsText("/Users/jlucas/Documents/leipzig/filtered.csv")
-  // .writeToSocket("localhost",5555, new SimpleStringSchema())
+   .writeToSocket("localhost",5555, new SimpleStringSchema())
 
-    filtered_source.print()
+   // filtered_source.print()
 
 
     env.execute("Flink Scala GDELT Analyzer")
