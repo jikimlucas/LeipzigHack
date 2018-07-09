@@ -1,0 +1,182 @@
+<html>
+<head>  
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.10/lodash.js"></script>  <style>
+  #s {
+    background-color: #C7D9D9;
+}
+
+rect {stroke:rgb(0,0,0); fill:rgb(255,255,255); }
+tt { fill:rgb(255,255,255);}
+rect.neg { fill:rgb(255,0,0); }
+rect.pos { fill:rgb(0,255,0);}
+
+/* text.rotate {
+    transform: rotate(90deg);
+    transform-origin: 50% 50%;
+} */
+
+</style>
+</head>
+<body>
+
+<svg id="s" style="width:4000px; height: 450px;" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+  
+</svg>
+
+<script>
+
+var countries = [];
+var country_obj = {};
+var tones = {}
+var svg = document.getElementById("s");
+var country_focus;
+var set_country_focus = function(f) {
+  console.log("focus", f)
+  if (f === country_focus) {
+    country_focus = undefined;
+  }
+  else {
+    country_focus = f;
+  }
+  redraw();
+}
+
+var lastDay;
+
+var nextData = function(msg_obj) {
+  // console.log(country, tone);
+  if (countries.indexOf(msg_obj.ctry) == -1) {
+    countries.push(msg_obj.ctry);
+    tones[msg_obj.ctry] = []
+  }
+  tones[msg_obj.ctry].push(msg_obj.avgtone);
+  tones[msg_obj.ctry] = tones[msg_obj.ctry].slice(-14);
+  country_obj[msg_obj.ctry] = msg_obj;
+  
+  if (msg_obj.date === lastDay) { return; }
+  
+    redraw(lastDay);
+    
+    lastDay = msg_obj.date;
+  }
+
+  var redraw = function(date) {
+    
+    
+    var height = window.innerHeight - 15;
+    var barPadding = 10;
+    var barWidth = 20; //(s.width / countries.length);
+    // console.log(barWidth);
+    s.setAttribute("style", "width:" + (countries.length * (barWidth + barPadding))+ "px; height: " + (height) + "px;")
+    
+    while (svg.firstChild) {
+      svg.removeChild(svg.firstChild);
+    }
+    
+    var date_text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+     date_text.setAttribute("x", 15);
+     date_text.setAttribute("y", 15);
+     s.appendChild(date_text);
+     date_text.textContent = date;
+    
+    _.forEach(countries, function(country, idx) {
+      _.forEach(tones[country], function(tone, idx2) {
+          lvl = tones[country].length - idx2 - 1;
+          var xc = ((idx + 1) * (barWidth + barPadding) + 3*lvl);
+          var r = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+          r.setAttribute("width", barWidth);
+          r.setAttribute("x", xc);
+          r.setAttribute("height", Math.abs(tone));
+          r.classList.add(country);
+          if (tone < 0) {
+              r.setAttribute("y", height/2 - 4*lvl);
+              r.classList.add("neg");
+          }
+          else {
+              r.setAttribute("y", height/2 - tone - 4*lvl);
+              r.classList.add("pos");
+          }
+          if (country_focus) {
+              if (country_focus == country && lvl == 0) {
+                var tt_g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+                var tt = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+                tt.setAttribute("height", 50);
+                tt.setAttribute("width", 180);
+                tt_g.setAttribute("transform", "translate(" +  (xc - 190) +" " + (height/2 - 25) +")")
+                // tt_g.setAttribute("y", height/2 - 25);
+                // tt_g.setAttribute("x", xc - 160);
+                tt.classList.add("tt");
+                tt_g.appendChild(tt);
+                var tt_text = "Tone: " + Math.round(country_obj[country].avgtone * 100)/100 + " in " + country_obj[country].count;
+                var tt_text2= "Code: " + country_obj[country].evtcode + " with " + Math.round(country_obj[country].maxtone*100)/100;
+                var textnode = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                textnode.textContent = tt_text;
+                textnode.setAttribute("y", 20);
+                textnode.setAttribute("x", 5);
+                tt_g.appendChild(textnode);
+                textnode = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                textnode.textContent = tt_text2;
+                textnode.setAttribute("y", 40);
+                textnode.setAttribute("x", 5);
+                tt_g.appendChild(textnode);
+              } 
+              if (country_focus == country) {
+                r.setAttribute("opacity", "1.0");
+              }
+              else {
+                r.setAttribute("opacity", "0.1");
+              }
+          }
+          else {
+              r.setAttribute("opacity", Math.sqrt(1.0/(lvl + 1)));
+          }
+          s.appendChild(r);
+          if (tt_g) {
+            s.appendChild(tt_g);
+          }
+          
+          var cname;
+          if (lvl == 0) {
+            r.addEventListener("click",function() { 
+              set_country_focus(country);
+            });
+            
+            cname = document.createElementNS("http://www.w3.org/2000/svg", "text");
+            // cname.setAttribute("x", );
+            // cname.setAttribute("y", height/2);
+            cname.textContent = country;
+    
+            
+            if (tone < 0) {
+              cname.setAttribute("transform", "rotate(-90) translate("+ (-height/2 - 80) + " " + (xc + barWidth - 5)  + ")");
+            }
+            else {
+              cname.setAttribute("transform", "rotate(-90) translate("+ (-height/2 + 10) + " " + (xc + barWidth - 5)  + ")");
+            }
+            cname.classList.add("rotate");
+            s.appendChild(cname);
+          }
+      })
+    })
+  }
+  
+  var exampleSocket = new WebSocket("ws://localhost:8000");
+  exampleSocket.onmessage = function (event) {
+    // console.log(event.data);
+    var msg = event.data.split("|");
+    if (msg.length < 6) { return; }
+    var msg_obj = {ctry: msg[0],
+      avgtone: msg[1],
+      count: msg[2],
+      maxtone: msg[3],
+      evtcode: msg[4],
+      date: msg[5]};
+    console.log(msg_obj);
+    nextData(msg_obj);
+  }
+  
+  redraw("XX-XX-XXXX");
+</script>
+
+</body>
+</html>
